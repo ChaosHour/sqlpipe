@@ -740,6 +740,8 @@ func (system Mysql) getSqlFormatters() (
 	}
 }
 
+/* Original Query using CTE's */
+/*
 func (system Mysql) getTableColumnInfosRows(schema, table string) (rows *sql.Rows, err error) {
 	query := fmt.Sprintf(`
 		WITH PrimaryKeys AS (
@@ -754,7 +756,7 @@ func (system Mysql) getTableColumnInfosRows(schema, table string) (rows *sql.Row
 				tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
 				AND kcu.TABLE_NAME = '%v'
 		)
-		
+
 		SELECT
 			columns.COLUMN_NAME AS col_name,
 			columns.DATA_TYPE AS col_type,
@@ -770,6 +772,45 @@ func (system Mysql) getTableColumnInfosRows(schema, table string) (rows *sql.Row
 		ORDER BY
 			columns.ORDINAL_POSITION;
 	`, table, table)
+
+	rows, err = system.query(query)
+	if err != nil {
+		return nil, fmt.Errorf("error getting table column infos rows :: %v", err)
+	}
+
+	return rows, nil
+}
+*/
+
+func (system Mysql) getTableColumnInfosRows(schema, table string) (rows *sql.Rows, err error) {
+	query := fmt.Sprintf(`
+	 SELECT DISTINCT
+		 columns.COLUMN_NAME AS col_name,
+		 columns.DATA_TYPE AS col_type,
+		 COALESCE(columns.NUMERIC_PRECISION, -1) AS col_precision,
+		 COALESCE(columns.NUMERIC_SCALE, -1) AS col_scale,
+		 COALESCE(columns.CHARACTER_MAXIMUM_LENGTH, -1) AS col_length,
+		 CASE WHEN pk.COLUMN_NAME IS NOT NULL THEN true ELSE false END AS col_is_primary
+	 FROM
+		 information_schema.COLUMNS AS columns
+	 LEFT JOIN (
+		 SELECT
+			 kcu.COLUMN_NAME
+		 FROM
+			 information_schema.KEY_COLUMN_USAGE AS kcu
+		 JOIN information_schema.TABLE_CONSTRAINTS AS tc
+			 ON kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+			 AND kcu.TABLE_NAME = tc.TABLE_NAME
+		 WHERE
+			 tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
+			 AND kcu.TABLE_NAME = '%s'
+	 ) AS pk ON columns.COLUMN_NAME = pk.COLUMN_NAME
+	 WHERE
+		 columns.TABLE_NAME = '%s'
+		 AND columns.TABLE_SCHEMA = '%s'
+	 ORDER BY
+		 columns.ORDINAL_POSITION;
+ `, table, table, schema)
 
 	rows, err = system.query(query)
 	if err != nil {
